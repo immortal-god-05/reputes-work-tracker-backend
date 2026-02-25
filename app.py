@@ -380,14 +380,11 @@ def update_task():
         data = request.get_json()
 
         task_id = data.get("taskId", "").strip()
-        new_status = data.get("newStatus", "").strip()
+        new_status = data.get("newStatus", "")
+        new_status = new_status.strip() if isinstance(new_status, str) else ""
 
         if not task_id:
             return jsonify({"error": "taskId is required"}), 400
-        if not new_status:
-            return jsonify({"error": "newStatus is required"}), 400
-
-        sheets = get_service()
 
         # Ensure Sheet2 and header exist, then read all rows to find the target
         sheets = ensure_sheet2_with_header()
@@ -411,18 +408,24 @@ def update_task():
         today = datetime.date.today()
         today_str = today.strftime("%Y-%m-%d")
 
-        # Update status and change date
-        target_row[COL["Status"]] = new_status
-        target_row[COL["ChnageOnStatus"]] = today_str
+        # Track status changes (reassignment should be allowed without status update)
+        existing_status = safe_get(target_row, COL["Status"]).strip()
+        status_changed = bool(new_status) and (new_status != existing_status)
+
+        # Update status + change date only when status actually changes
+        if status_changed:
+            target_row[COL["Status"]] = new_status
+            target_row[COL["ChnageOnStatus"]] = today_str
 
         # Reassign worker/colleague if provided
         if data.get("newWorker"):
             target_row[COL["Employee Name"]] = data["newWorker"].strip()
-        if data.get("newColleague"):
-            target_row[COL["Collegaue"]] = data["newColleague"].strip()
+        if "newColleague" in (data or {}):
+            # Allow explicit NONE updates
+            target_row[COL["Collegaue"]] = (data.get("newColleague") or "NONE").strip() or "NONE"
 
         # If Completed or Cancelled — calculate total days taken and delivery status
-        if new_status in ("Completed", "Cancelled"):
+        if status_changed and new_status in ("Completed", "Cancelled"):
             assigned_date_str = safe_get(target_row, COL["Date"])
             tat_str = safe_get(target_row, COL["TAT"])
 
@@ -452,7 +455,7 @@ def update_task():
 
         return jsonify({
             "success": True,
-            "message": f"Task '{task_id}' updated to '{new_status}' successfully."
+            "message": f"Task '{task_id}' updated successfully."
         })
 
     except Exception as e:
