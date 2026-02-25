@@ -182,11 +182,16 @@ def get_sheet1():
         ).execute()
         rows = result.get("values", [])
 
+        # Skip header row (assumed first row) so labels like
+        # "Worker Names", "Client Names", "Task Types" do not
+        # appear in dropdowns.
+        data_rows = rows[1:] if rows else []
+
         workers = []
         clients = []
         task_types = []
 
-        for row in rows:
+        for row in data_rows:
             if len(row) >= 1 and row[0].strip():
                 workers.append(row[0].strip())
             if len(row) >= 2 and row[1].strip():
